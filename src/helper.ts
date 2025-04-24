@@ -5,6 +5,7 @@ import path from 'path';
 
 import { parse } from 'acorn';
 import { simple as simpleWalk } from 'acorn-walk';
+import Bluebird from 'bluebird';
 import fs from 'fs-extra';
 import { uniq } from 'ramda';
 
@@ -24,12 +25,12 @@ export function assertIsString(input: unknown, message = 'input is not a string'
   }
 }
 
-export function extractFunctionEntries(
+export async function extractFunctionEntries(
   cwd: string,
   provider: string,
   functions: Record<string, Serverless.FunctionDefinitionHandler>,
   resolveExtensions?: string[]
-): FunctionEntry[] {
+): Promise<FunctionEntry[]> {
   // The Google provider will use the entrypoint not from the definition of the
   // handler function, but instead from the package.json:main field, or via a
   // index.js file. This check reads the current package.json in the same way
@@ -39,16 +40,16 @@ export function extractFunctionEntries(
   if (provider === 'google') {
     const packageFilePath = path.join(cwd, 'package.json');
 
-    if (fs.existsSync(packageFilePath)) {
+    if (await fs.pathExists(packageFilePath)) {
       // Load in the package.json file.
-      const packageFile = JSON.parse(fs.readFileSync(packageFilePath).toString());
+      const packageFile = JSON.parse(await fs.readFile(packageFilePath).toString());
 
       // Either grab the package.json:main field, or use the index.ts file.
       // (This will be transpiled to index.js).
       const entry = packageFile.main ? packageFile.main.replace(/\.js$/, '.ts') : 'index.ts';
 
       // Check that the file indeed exists.
-      if (!fs.existsSync(path.join(cwd, entry))) {
+      if (!(await fs.pathExists(path.join(cwd, entry)))) {
         throw new Error(`Compilation failed. Cannot locate entrypoint, ${entry} not found`);
       }
 
@@ -56,11 +57,11 @@ export function extractFunctionEntries(
     }
   }
 
-  return Object.keys(functions)
-    .filter((functionAlias) => {
+  return Bluebird.mapSeries(
+    Object.keys(functions).filter((functionAlias) => {
       return !(functions[functionAlias] as EsbuildFunctionDefinitionHandler).skipEsbuild;
-    })
-    .map((functionAlias) => {
+    }),
+    async (functionAlias) => {
       const func = functions[functionAlias] as EsbuildFunctionDefinitionHandler;
       assert(func, `${functionAlias} not found in functions`);
 
@@ -76,7 +77,7 @@ export function extractFunctionEntries(
 
       for (const extension of extensions) {
         // Check if the .{extension} files exists. If so return that to watch
-        if (fs.existsSync(path.join(cwd, fileName + extension))) {
+        if (await fs.pathExists(path.join(cwd, fileName + extension))) {
           const entry = path.relative(cwd, fileName + extension);
 
           return {
@@ -85,7 +86,7 @@ export function extractFunctionEntries(
             entry: os.platform() === 'win32' ? entry.replace(/\\/g, '/') : entry,
           };
         }
-        if (fs.existsSync(path.join(cwd, path.join(fileName, 'index') + extension))) {
+        if (await fs.pathExists(path.join(cwd, path.join(fileName, 'index') + extension))) {
           const entry = path.relative(cwd, path.join(fileName, 'index') + extension);
 
           return {
@@ -99,7 +100,8 @@ export function extractFunctionEntries(
       throw new Error(
         `Compilation failed for function alias ${functionAlias}. Please ensure you have an index file with ext .ts or .js, or have a path listed as main key in package.json`
       );
-    });
+    }
+  );
 }
 
 /**
@@ -174,8 +176,8 @@ export const isESM = (buildOptions: Configuration): boolean => {
  * @param bundlePath Absolute path to a bundled JS file
  * @param useESM Should the bundle be treated as ESM
  */
-export const getDepsFromBundle = (bundlePath: string, useESM: boolean): string[] => {
-  const bundleContent = fs.readFileSync(bundlePath, 'utf8');
+export const getDepsFromBundle = async (bundlePath: string, useESM: boolean): Promise<string[]> => {
+  const bundleContent = await fs.readFile(bundlePath, 'utf8');
   const deps: string[] = [];
 
   const ast = parse(bundleContent, {

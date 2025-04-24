@@ -107,12 +107,13 @@ export async function pack(this: EsbuildServerlessPlugin) {
   assertIsString(workDirPath, 'workDirPath is not a string');
 
   // get a list of all path in build
-  const files: IFiles = globby
-    .sync('**', {
+  const files: IFiles = (
+    await globby('**', {
       cwd: buildDirPath,
       dot: true,
       onlyFiles: true,
     })
+  )
     .filter((file) => !excludedFiles.includes(file))
     .map((localPath) => ({ localPath, rootPath: path.join(buildDirPath, localPath) }))
     .map((file) => {
@@ -144,7 +145,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
     const startZip = Date.now();
 
     await zip(artifactPath, filesPathList, this.buildOptions?.nativeZip);
-    const { size } = fs.statSync(artifactPath);
+    const { size } = await fs.stat(artifactPath);
 
     this.log.verbose(
       `Zip service ${this.serverless.service.service} - ${humanSize(size)} [${Date.now() - startZip} ms]`
@@ -204,7 +205,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
     let depWhiteList: string[] = [];
 
     if (hasExternals && packagerDependenciesList.dependencies) {
-      const bundleDeps = getDepsFromBundle(path.join(buildDirPath, bundlePath), isESM(buildOptions));
+      const bundleDeps = await getDepsFromBundle(path.join(buildDirPath, bundlePath), isESM(buildOptions));
       const bundleExternals = intersection(bundleDeps, externals);
 
       depWhiteList = flatDep(packagerDependenciesList.dependencies, bundleExternals);
@@ -231,7 +232,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
     const startZip = Date.now();
     await zip(artifactPath, filesPathList, buildOptions.nativeZip);
-    const { size } = fs.statSync(artifactPath);
+    const { size } = await fs.stat(artifactPath);
     this.log.verbose(`Function zipped: ${functionAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
 
     // defined present zip as output artifact
