@@ -144,7 +144,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
     const startZip = Date.now();
 
-    await zip(artifactPath, filesPathList, this.buildOptions?.nativeZip);
+    await zip(artifactPath, filesPathList, this.buildOptions?.nativeZip, this.log);
     const { size } = fs.statSync(artifactPath);
 
     this.log.verbose(
@@ -213,27 +213,35 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
     const zipName = `${functionAlias}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
+    const prepackedPath = this.buildOptions?.prepackedArchiveFolder
+      ? path.join(this.buildOptions.prepackedArchiveFolder, zipName)
+      : undefined;
 
-    // filter files
-    const filesPathList = filterFilesForZipPackage({
-      files,
-      functionAlias,
-      includedFiles,
-      hasExternals,
-      isGoogleProvider,
-      depWhiteList,
-      excludedFiles: excludedPackageFiles,
-    })
-      // remove prefix from individual function extra files
-      .map(({ localPath, ...rest }) => ({
-        localPath: localPath.replace(`${ONLY_PREFIX}${functionAlias}/`, ''),
-        ...rest,
-      }));
+    if (prepackedPath && fs.pathExistsSync(prepackedPath)) {
+      await fs.copy(prepackedPath, artifactPath);
+      this.log.verbose(`Copied ${functionAlias}.zip from ${prepackedPath}`);
+    } else {
+      // filter files
+      const filesPathList = filterFilesForZipPackage({
+        files,
+        functionAlias,
+        includedFiles,
+        hasExternals,
+        isGoogleProvider,
+        depWhiteList,
+        excludedFiles: excludedPackageFiles,
+      })
+        // remove prefix from individual function extra files
+        .map(({ localPath, ...rest }) => ({
+          localPath: localPath.replace(`${ONLY_PREFIX}${functionAlias}/`, ''),
+          ...rest,
+        }));
 
-    const startZip = Date.now();
-    await zip(artifactPath, filesPathList, buildOptions.nativeZip);
-    const { size } = fs.statSync(artifactPath);
-    this.log.verbose(`Function zipped: ${functionAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
+      const startZip = Date.now();
+      await zip(artifactPath, filesPathList, buildOptions.nativeZip, this.log);
+      const { size } = fs.statSync(artifactPath);
+      this.log.verbose(`Function zipped: ${functionAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
+    }
 
     // defined present zip as output artifact
     setFunctionArtifactPath.call(this, func, path.relative(this.serviceDirPath, artifactPath));

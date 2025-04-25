@@ -6,6 +6,7 @@ import { type Cause, Effect, Option } from 'effect';
 import execa from 'execa';
 import fs from 'fs-extra';
 import path from 'path';
+import pMap from 'p-map';
 import type { ESMPluginsModule, IFile, IFiles } from './types';
 import FS, { FSyncLayer, makePath, makeTempPathScoped, safeFileExists } from './utils/effect-fs';
 
@@ -75,14 +76,19 @@ export const humanSize = (size: number) => {
   return `${sanitized} ${['B', 'KB', 'MB', 'GB', 'TB'][exponent]}`;
 };
 
-export const zip = async (zipPath: string, filesPathList: IFiles, useNativeZip = false): Promise<void> => {
+export const zip = async (
+  zipPath: string,
+  filesPathList: IFiles,
+  useNativeZip: boolean | undefined,
+  log: { verbose: (...inputs: any[]) => void }
+): Promise<void> => {
   // create a temporary directory to hold the final zip structure
   const tempDirName = `${path.basename(zipPath, path.extname(zipPath))}-${Date.now().toString()}`;
 
   const copyFileEffect = (temp: string) => (file: IFile) => FS.copy(file.rootPath, path.join(temp, file.localPath));
   const bestZipEffect = (temp: string) =>
     Effect.tryPromise(() => bestzip({ source: '*', destination: zipPath, cwd: temp }));
-  const nodeZipEffect = Effect.tryPromise(() => nodeZip(zipPath, filesPathList));
+  const nodeZipEffect = Effect.tryPromise(() => nodeZip(zipPath, filesPathList, log));
 
   const archiveEffect = makeTempPathScoped(tempDirName).pipe(
     // copy all required files from origin path to (sometimes modified) target path
@@ -97,26 +103,53 @@ export const zip = async (zipPath: string, filesPathList: IFiles, useNativeZip =
   await archiveEffect.pipe(Effect.provide(NodeFileSystem.layer), Effect.runPromise);
 };
 
-function nodeZip(zipPath: string, filesPathList: IFiles): Promise<void> {
+async function nodeZip(
+  zipPath: string,
+  filesPathList: IFiles,
+  log: { verbose: (...inputs: any[]) => void }
+): Promise<void> {
+  let start = Date.now();
   const zipArchive = archiver.create('zip');
   const output = fs.createWriteStream(zipPath);
 
+  const fileModes = new Map<string, number | undefined>();
+
+  log.verbose(`nodeZip1 [${Date.now() - start} ms]`);
+  start = Date.now();
+
+  await pMap(filesPathList, async (file) => {
+    const stats = await fs.stat(file.rootPath);
+
+    if (!stats.isDirectory()) {
+      fileModes.set(file.rootPath, stats.mode);
+    }
+  });
+
+  log.verbose(`nodeZip2 [${Date.now() - start} ms]`);
+
   // write zip
-  output.on('open', () => {
+  output.on('open', async () => {
+    let start2 = Date.now();
+
     zipArchive.pipe(output);
 
     filesPathList.forEach((file) => {
-      const stats = fs.statSync(file.rootPath);
-      if (stats.isDirectory()) return;
+      const exists = fileModes.has(file.rootPath);
+      if (!exists) return;
 
       zipArchive.append(fs.readFileSync(file.rootPath), {
         name: file.localPath,
-        mode: stats.mode,
+        mode: fileModes.get(file.rootPath),
         date: new Date(0), // necessary to get the same hash when zipping the same content
       });
     });
 
-    zipArchive.finalize();
+    log.verbose(`nodeZip.write [${Date.now() - start2} ms]`);
+    start2 = Date.now();
+
+    await zipArchive.finalize();
+
+    log.verbose(`nodeZip.finalize [${Date.now() - start2} ms]`);
   });
 
   return new Promise((resolve, reject) => {
