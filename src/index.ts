@@ -151,17 +151,37 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
       },
       'before:package:createDeploymentArtifacts': async () => {
         this.log.verbose('before:package:createDeploymentArtifacts');
-        if ((await this.functionEntries)?.length > 0) {
+        let start = Date.now();
+
+        if (await this.functionEntries?.length > 0) {
           await this.bundle();
+          this.log.verbose(`before:package:createDeploymentArtifacts after:bundle ${Date.now() - start}ms`);
+
+          start = Date.now();
           await this.packExternalModules();
+          this.log.verbose(
+            `before:package:createDeploymentArtifacts after:packExternalModules ${Date.now() - start}ms`
+          );
+
+          start = Date.now();
           await this.copyExtras();
+          this.log.verbose(`before:package:createDeploymentArtifacts after:copyExtras ${Date.now() - start}ms`);
+
+          start = Date.now();
           await this.pack();
+          this.log.verbose(`before:package:createDeploymentArtifacts after:pack ${Date.now() - start}ms`);
         }
       },
       'after:package:createDeploymentArtifacts': async () => {
-        this.log.verbose('after:package:createDeploymentArtifacts');
+        this.log.verbose('after:package:createDeploymentArtifacts start');
+
+        let start = Date.now();
         await this.disposeContexts();
+        this.log.verbose(`after:package:createDeploymentArtifacts after:disposeContexts ${Date.now() - start}ms`);
+
+        start = Date.now();
         await this.cleanup();
+        this.log.verbose(`after:package:createDeploymentArtifacts after:cleanup ${Date.now() - start}ms`);
       },
       'before:deploy:function:packageFunction': async () => {
         this.log.verbose('after:deploy:function:packageFunction');
