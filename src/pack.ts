@@ -107,12 +107,13 @@ export async function pack(this: EsbuildServerlessPlugin) {
   assertIsString(workDirPath, 'workDirPath is not a string');
 
   // get a list of all path in build
-  const files: IFiles = globby
-    .sync('**', {
+  const files: IFiles = (
+    await globby('**', {
       cwd: buildDirPath,
       dot: true,
       onlyFiles: true,
     })
+  )
     .filter((file) => !excludedFiles.includes(file))
     .map((localPath) => ({ localPath, rootPath: path.join(buildDirPath, localPath) }))
     .map((file) => {
