@@ -213,9 +213,14 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
     const zipName = `${functionAlias}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
-    const prepackedPath = this.buildOptions?.prepackedArchiveFolder
-      ? path.join(this.buildOptions.prepackedArchiveFolder, zipName)
-      : undefined;
+
+    const prepackedPath =
+      // eslint-disable-next-line no-nested-ternary -- TODO clean up eslint error
+      this.serverless.service.package.individually && this.buildOptions?.prepackedArchiveFolder
+        ? this.buildOptions.prepackedArchiveFolder.startsWith('/')
+          ? path.join(this.buildOptions.prepackedArchiveFolder, zipName)
+          : path.join(workDirPath, this.buildOptions.prepackedArchiveFolder, zipName)
+        : undefined;
 
     if (prepackedPath && fs.pathExistsSync(prepackedPath)) {
       await fs.copy(prepackedPath, artifactPath);
