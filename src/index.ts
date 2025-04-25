@@ -153,7 +153,7 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
         this.log.verbose('before:package:createDeploymentArtifacts');
         let start = Date.now();
 
-        if ((await this.functionEntries)?.length > 0) {
+        if (await this.functionEntries?.length > 0) {
           await this.bundle();
           this.log.verbose(`before:package:createDeploymentArtifacts after:bundle ${Date.now() - start}ms`);
 
