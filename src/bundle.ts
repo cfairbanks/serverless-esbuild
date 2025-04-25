@@ -130,7 +130,7 @@ export async function bundle(this: EsbuildServerlessPlugin): Promise<void> {
   };
 
   // Files can contain multiple handlers for multiple functions, we want to get only the unique ones
-  const uniqueFiles: string[] = uniq((await this.functionEntries).map(({ entry }) => entry));
+  const uniqueFiles: string[] = uniq(this.functionEntries.map(({ entry }) => entry));
 
   this.log.verbose(`Compiling with concurrency: ${buildOptions.concurrency}`);
 
@@ -146,7 +146,7 @@ export async function bundle(this: EsbuildServerlessPlugin): Promise<void> {
   }, {});
 
   // Map function entries back to bundles
-  this.buildResults = (await this.functionEntries)
+  this.buildResults = this.functionEntries
     .map(({ entry, func, functionAlias }) => {
       const { bundlePath } = this.buildCache[entry] ?? {};
 

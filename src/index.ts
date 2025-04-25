@@ -38,9 +38,9 @@ import type {
 } from './types';
 import { isESMModule } from './utils';
 
-async function updateFile(op: string, src: string, dest: string) {
+function updateFile(op: string, src: string, dest: string) {
   if (['add', 'change', 'addDir'].includes(op)) {
-    await fs.copy(src, dest, {
+    fs.copySync(src, dest, {
       dereference: true,
       errorOnExist: false,
       preserveTimestamps: true,
@@ -51,7 +51,7 @@ async function updateFile(op: string, src: string, dest: string) {
   }
 
   if (['unlink', 'unlinkDir'].includes(op)) {
-    await fs.remove(dest);
+    fs.removeSync(dest);
   }
 }
 
@@ -151,7 +151,7 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
       },
       'before:package:createDeploymentArtifacts': async () => {
         this.log.verbose('before:package:createDeploymentArtifacts');
-        if ((await this.functionEntries)?.length > 0) {
+        if (this.functionEntries?.length > 0) {
           await this.bundle();
           await this.packExternalModules();
           await this.copyExtras();

@@ -61,12 +61,12 @@ function addModulesToPackageJson(externalModules: string[], packageJson: JSONObj
  * Resolve the needed versions of production dependencies for external modules.
  * @this - The active plugin instance
  */
-async function getProdModules(
+function getProdModules(
   this: EsbuildServerlessPlugin,
   externalModules: { external: string }[],
   packageJsonPath: string,
   rootPackageJsonPath: string
-): Promise<string[]> {
+) {
   const packageJson = this.serverless.utils.readFileSync(packageJsonPath) as PackageJSON;
 
   // only process the module stated in dependencies section
@@ -78,7 +78,7 @@ async function getProdModules(
 
   // Get versions of all transient modules
   // eslint-disable-next-line max-statements
-  for (const externalModule of externalModules) {
+  R.forEach((externalModule) => {
     // (1) If not present in Dev Dependencies or Dependencies
     if (
       !packageJson.dependencies?.[externalModule.external] &&
@@ -88,7 +88,7 @@ async function getProdModules(
         `INFO: Runtime dependency '${externalModule.external}' not found in dependencies or devDependencies. It has been excluded automatically.`
       );
 
-      return [];
+      return;
     }
 
     // (2) If present in Dev Dependencies
@@ -113,7 +113,7 @@ async function getProdModules(
         `INFO: Runtime dependency '${externalModule.external}' found in devDependencies. It has been excluded automatically.`
       );
 
-      return [];
+      return;
     }
 
     // (3) otherwise let's get the version
@@ -135,9 +135,9 @@ async function getProdModules(
     );
 
     // eslint-disable-next-line no-nested-ternary
-    const modulePackagePath = (await fse.pathExists(localModulePackagePath))
+    const modulePackagePath = fse.pathExistsSync(localModulePackagePath)
       ? localModulePackagePath
-      : (await fse.pathExists(rootModulePackagePath))
+      : fse.pathExistsSync(rootModulePackagePath)
       ? rootModulePackagePath
       : null;
 
@@ -166,7 +166,7 @@ async function getProdModules(
 
       if (!R.isEmpty(peerDependenciesWithoutOptionals)) {
         this.log.debug(`Adding explicit non-optionals peers for dependency ${externalModule.external}`);
-        const peerModules = await getProdModules.call(
+        const peerModules = getProdModules.call(
           this,
           R.compose(
             R.map(([external]) => ({ external })),
@@ -181,7 +181,7 @@ async function getProdModules(
     } catch (error) {
       this.log.warning(`WARNING: Could not check for peer dependencies of ${externalModule.external}`);
     }
-  }
+  }, externalModules);
 
   return prodModules;
 }
@@ -310,7 +310,7 @@ export async function packExternalModules(this: EsbuildServerlessPlugin) {
   // (1) Generate dependency composition
   const externalModules = R.map((external) => ({ external }), externals);
   const compositeModules: JSONObject = R.uniq(
-    await getProdModules.call(this, externalModules, packageJsonPath, rootPackageJsonPath)
+    getProdModules.call(this, externalModules, packageJsonPath, rootPackageJsonPath)
   );
 
   if (R.isEmpty(compositeModules)) {

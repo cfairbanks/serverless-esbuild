@@ -102,19 +102,19 @@ function nodeZip(zipPath: string, filesPathList: IFiles): Promise<void> {
   const output = fs.createWriteStream(zipPath);
 
   // write zip
-  output.on('open', async () => {
+  output.on('open', () => {
     zipArchive.pipe(output);
 
-    for (const file of filesPathList) {
-      const stats = await fs.stat(file.rootPath);
+    filesPathList.forEach((file) => {
+      const stats = fs.statSync(file.rootPath);
       if (stats.isDirectory()) return;
 
-      zipArchive.append(await fs.readFile(file.rootPath), {
+      zipArchive.append(fs.readFileSync(file.rootPath), {
         name: file.localPath,
         mode: stats.mode,
         date: new Date(0), // necessary to get the same hash when zipping the same content
       });
-    }
+    });
 
     zipArchive.finalize();
   });
